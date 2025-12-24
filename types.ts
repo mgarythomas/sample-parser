@@ -1,7 +1,7 @@
 export interface DesignToken {
   name: string;
   value: string | number | TypographyValue;
-  type: 'color' | 'spacing' | 'typography' | 'shadow' | 'borderRadius';
+  type: 'color' | 'spacing' | 'typography' | 'shadow' | 'borderRadius' | 'text' | 'number';
   category?: string;
   description?: string;
 }

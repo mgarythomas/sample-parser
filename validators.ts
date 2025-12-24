@@ -88,6 +88,11 @@ function validateTokenValue(token: DesignToken): void {
       break;
 
     default:
+      // Allow temporary types that will be processed during grouping
+      if (type === 'text' || type === 'number') {
+        // These are temporary types used during parsing, skip validation
+        return;
+      }
       throw new TokenValidationError(`Unknown token type: ${type}`);
   }
 }
@@ -105,7 +110,7 @@ function parseW3CTokens(data: W3CTokensFile, prefix = ''): DesignToken[] {
       // This is a token (handle both $type and type for backward compatibility)
       const token = value as W3CDesignToken & { type?: string };
       const tokenType = token.$type || token.type;
-      const designToken = convertW3CToken(tokenName, { ...token, $type: tokenType });
+      const designToken = convertW3CToken(tokenName, { ...token, $type: tokenType || 'unknown' });
       if (designToken) {
         tokens.push(designToken);
       }
@@ -115,7 +120,112 @@ function parseW3CTokens(data: W3CTokensFile, prefix = ''): DesignToken[] {
     }
   });
 
-  return tokens;
+  // Post-process to group typography tokens
+  return groupTypographyTokens(tokens);
+}
+
+// Group individual font properties into complete typography tokens
+function groupTypographyTokens(tokens: DesignToken[]): DesignToken[] {
+  const groupedTokens: DesignToken[] = [];
+  const fontGroups: Record<string, any> = {};
+
+  tokens.forEach(token => {
+    // Check if this is a font-related token that should be grouped
+    if (token.name.startsWith('font-') && (
+      token.name.includes('-family') || 
+      token.name.includes('-size') || 
+      token.name.includes('-weight') || 
+      token.name.includes('-line-height') ||
+      token.name.includes('-letter-spacing')
+    )) {
+      // Extract the base font name (e.g., "font-heading-xl-family" -> "font-heading-xl")
+      const baseName = token.name.replace(/-(family|size|weight|line-height|letter-spacing)$/, '');
+      const property = token.name.split('-').slice(-1)[0]; // Get the last part after splitting by '-'
+      
+      // Handle compound property names like 'line-height'
+      let propertyName = property;
+      if (token.name.endsWith('-line-height')) {
+        propertyName = 'line-height';
+      } else if (token.name.endsWith('-letter-spacing')) {
+        propertyName = 'letter-spacing';
+      }
+
+      if (!fontGroups[baseName]) {
+        fontGroups[baseName] = {
+          name: baseName,
+          type: 'typography' as const,
+          description: token.description,
+          properties: {}
+        };
+      }
+
+      // Debug logging
+      // console.log(`Processing font token: ${token.name}, property: ${propertyName}, value: ${token.value} (${typeof token.value})`);
+
+      // Map the property to the typography value
+      switch (propertyName) {
+        case 'family':
+          fontGroups[baseName].properties.fontFamily = token.value;
+          break;
+        case 'size':
+          const fontSizePx = typeof token.value === 'number' ? token.value : parseFloat(token.value as string);
+          fontGroups[baseName].properties.fontSize = `${fontSizePx / 16}rem`;
+          fontGroups[baseName].properties.fontSizePx = fontSizePx; // Store original px value for line-height calculation
+          // console.log(`  Font size: ${fontSizePx}px -> ${fontSizePx / 16}rem`);
+          break;
+        case 'weight':
+          fontGroups[baseName].properties.fontWeight = token.value;
+          break;
+        case 'line-height':
+          // Store the pixel value for calculation
+          fontGroups[baseName].properties.lineHeightPx = typeof token.value === 'number' ? token.value : parseFloat(token.value as string);
+          // console.log(`  Line height: ${fontGroups[baseName].properties.lineHeightPx}px`);
+          break;
+        case 'letter-spacing':
+          fontGroups[baseName].properties.letterSpacing = typeof token.value === 'number' ? `${token.value}em` : token.value;
+          break;
+      }
+    } else {
+      // Keep non-font tokens as-is
+      groupedTokens.push(token);
+    }
+  });
+
+  // Convert font groups to typography tokens
+  Object.values(fontGroups).forEach(group => {
+    const { properties } = group;
+    
+    // Only create typography token if we have at least family and size
+    if (properties.fontFamily && properties.fontSize) {
+      // Calculate proper line-height
+      let lineHeight = '1.5'; // default
+      if (properties.lineHeightPx && properties.fontSizePx) {
+        // Calculate unitless line-height (lineHeight / fontSize)
+        const lineHeightPx = typeof properties.lineHeightPx === 'number' ? properties.lineHeightPx : parseFloat(properties.lineHeightPx);
+        const fontSizePx = typeof properties.fontSizePx === 'number' ? properties.fontSizePx : parseFloat(properties.fontSizePx);
+        
+        if (!isNaN(lineHeightPx) && !isNaN(fontSizePx) && fontSizePx > 0) {
+          const ratio = lineHeightPx / fontSizePx;
+          lineHeight = ratio.toFixed(3);
+        }
+      }
+
+      groupedTokens.push({
+        name: group.name,
+        type: 'typography',
+        value: {
+          fontFamily: properties.fontFamily,
+          fontSize: properties.fontSize,
+          fontWeight: properties.fontWeight || 400,
+          lineHeight,
+          letterSpacing: properties.letterSpacing
+        } as TypographyValue,
+        description: group.description
+      });
+    }
+  });
+
+  return groupedTokens;
 }
 
 function convertW3CToken(name: string, token: W3CDesignToken): DesignToken | null {
@@ -132,7 +242,7 @@ function convertW3CToken(name: string, token: W3CDesignToken): DesignToken | nul
 
     case 'dimension':
     case 'spacing':
-      // Convert number to rem if it's a number
+      // Convert number to rem if it's a number, or keep string as-is
       const spacingValue = typeof $value === 'number' ? `${$value / 16}rem` : $value as string;
       return {
         name,
@@ -176,12 +286,62 @@ function convertW3CToken(name: string, token: W3CDesignToken): DesignToken | nul
         description: $description,
       };
 
-    // Handle other types that might be in the tokens but don't map to our design token types
+    // Handle individual font properties - these will be grouped later
     case 'text':
+      return {
+        name,
+        value: $value as string,
+        type: 'text' as any, // Temporary type, will be processed in grouping
+        description: $description,
+      };
+
     case 'number':
-      // These are individual properties, not full design tokens
-      // For now, we'll skip them as they're handled differently in the current structure
-      return null;
+      // Numbers can be various things - spacing, font sizes, weights, etc.
+      if (name.includes('space') || name.includes('margin') || name.includes('gutter')) {
+        // This is spacing/sizing
+        const spacingValue = typeof $value === 'number' ? `${$value / 16}rem` : $value as string;
+        return {
+          name,
+          value: spacingValue,
+          type: 'spacing',
+          description: $description,
+        };
+      } else if (name.includes('radius')) {
+        // This is border radius
+        const radiusValue = typeof $value === 'number' ? `${$value / 16}rem` : $value as string;
+        return {
+          name,
+          value: radiusValue,
+          type: 'borderRadius',
+          description: $description,
+        };
+      } else if (name.includes('width') && name.includes('border')) {
+        // This is border width
+        const borderValue = typeof $value === 'number' ? `${$value}px` : $value as string;
+        return {
+          name,
+          value: borderValue,
+          type: 'spacing', // Using spacing type for border widths
+          description: $description,
+        };
+      } else if (name.includes('size') && !name.includes('font')) {
+        // This is a size token (not font size)
+        const sizeValue = typeof $value === 'number' ? `${$value / 16}rem` : $value as string;
+        return {
+          name,
+          value: sizeValue,
+          type: 'spacing',
+          description: $description,
+        };
+      } else {
+        // For font-related numbers and other numbers, keep them as numbers for grouping
+        return {
+          name,
+          value: $value as string | number,
+          type: 'number' as any, // Temporary type, will be processed in grouping
+          description: $description,
+        };
+      }
   }
 
   return null;

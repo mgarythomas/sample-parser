@@ -62,7 +62,11 @@ export function transformTokens(tokens: DesignToken[]): TailwindThemeExtension {
 
       case 'borderRadius':
         if (theme.borderRadius && typeof token.value === 'string') {
-          const radiusName = token.name.replace(/^(border-?radius|radii)[-_]/, '').replace(/[-_]/g, '-');
+          let radiusName = token.name.replace(/^(border-?radius|radii)[-_]/, '').replace(/[-_]/g, '-');
+          // Handle special case for $default key
+          if (radiusName === '$default') {
+            radiusName = 'DEFAULT';
+          }
           theme.borderRadius[radiusName] = token.value;
         }
         break;
