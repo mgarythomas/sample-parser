@@ -1,0 +1,11 @@
+
+
+> @repo/design-tokens@0.0.0 build /Users/gary/Documents/Repos/kiro/digital-ui-mono-repo/packages/design-tokens
+> tsx scripts/build-tokens.ts
+
+🔨 Building design tokens...
+✓ Validating tokens...
+✓ Found 35 valid tokens
+✓ Transforming tokens to Tailwind format...
+✓ Generated tokens.ts
+✅ Design tokens built successfully!

@@ -1,0 +1,4 @@
+
+> @repo/tailwind-config@0.0.0 type-check /Users/gary/Documents/Repos/kiro/digital-ui-mono-repo/packages/config/tailwind-config
+> tsc --noEmit
+

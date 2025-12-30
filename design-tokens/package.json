@@ -1,0 +1,26 @@
+{
+  "name": "@repo/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./out/tokens.ts",
+    "./variables.css": "./out/variables.css"
+  },
+  "scripts": {
+    "build": "tsx scripts/build-tokens.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --run --coverage"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}
