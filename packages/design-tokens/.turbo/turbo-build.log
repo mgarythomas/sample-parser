@@ -1,0 +1,13 @@
+
+
+> @repo/design-tokens@0.0.0 build /Users/gary/Documents/Repos/mfe-mono-repo/packages/design-tokens
+> tsx scripts/build-tokens.ts
+
+🔨 Building design tokens...
+✓ Validating tokens...
+✓ Found 103 valid tokens
+✓ Transforming tokens to Tailwind format...
+✓ Generating CSS variables...
+✓ Generated tokens.ts
+✓ Generated variables.css
+✅ Design tokens built successfully!
